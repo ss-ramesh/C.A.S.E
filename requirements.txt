@@ -1,0 +1,6 @@
+Flask
+nltk
+numpy
+requests
+torch
+transformers
