@@ -1,3 +1,4 @@
+import re
 from chat_engine import ChatEngine
 from fastapi import FastAPI, UploadFile, Form
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,7 +18,7 @@ app.add_middleware(
 )
 
 def stream_chat_response(user_input: str):
-    """Yields chat response line-by-line while also sending to TTS"""
+    buffer = ""
     try:
         response = requests.post(
             chat_engine.api_url,
@@ -31,18 +32,38 @@ def stream_chat_response(user_input: str):
             },
             stream=True
         )
+
         for line in response.iter_lines(decode_unicode=True):
             if line:
                 try:
                     data = json.loads(line)
                     if "message" in data and "content" in data["message"]:
-                        content = data["message"]["content"]
-                        tts_engine.speak_stream(content)
-                        yield content
+                        chunk = data["message"]["content"]
+                    elif "response" in data:
+                        chunk = data["response"]
+                    else:
+                        continue
+
+                    buffer += chunk
+                    yield chunk  # Stream to frontend always
+                    print(f"[DEBUG] Chunk received: {chunk}")
+                    print(f"[DEBUG] Current buffer: {buffer}")
+                    # Trigger TTS if buffer ends in strong punctuation AND is long enough
+                    if len(buffer.strip()) > 5 and re.search(r"[.!?]['\"]?\s*$", buffer.strip()):
+                        tts_engine.speak_stream(buffer.strip())
+                        buffer = ""
+
                 except json.JSONDecodeError:
                     continue
+
+        # Flush leftover buffer
+        if buffer.strip():
+            tts_engine.speak_stream(buffer.strip())
+            yield buffer.strip()
+
     except Exception as e:
         yield f"\n[ERROR] {str(e)}"
+        tts_engine.speak_stream(f"\n[ERROR] {str(e)}")
 
 @app.post("/chat/audio")
 async def handle_audio(audio: UploadFile):

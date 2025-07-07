@@ -8,6 +8,7 @@ const TextChat = ({ onResponse }) => {
       method: "POST",
       body: new URLSearchParams({ prompt: input }),
     });
+    setInput(""); // Clear input after sending
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder("utf-8");

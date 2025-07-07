@@ -1,27 +1,38 @@
-import pyttsx3
 import threading
 import queue
-
-engine = pyttsx3.init()
-engine.setProperty('rate', 175)
+import pyttsx3
 
 speech_queue = queue.Queue()
 stop_flag = threading.Event()
 
 def _speak_worker():
+    engine = pyttsx3.init()
+    engine.setProperty('rate', 175)
+
     while not stop_flag.is_set():
-        text = speech_queue.get()
+        try:
+            text = speech_queue.get(timeout=1)
+        except queue.Empty:
+            continue
+
         if text is None:
             break
-        engine.say(text)
-        engine.runAndWait()
 
-# Launch background thread on import
-threading.Thread(target=_speak_worker, daemon=True).start()
+        try:
+            print("[TTS Worker] Speaking:", text)
+            engine.say(text)
+            engine.runAndWait()
+        except Exception as e:
+            print("[TTS ERROR] Runtime error during TTS:", e)
 
 def speak_stream(text: str):
-    speech_queue.put(text)
+    if text.strip():
+        print("[TTS] Queued for speech:", text)
+        speech_queue.put(text.strip())
 
 def stop():
     stop_flag.set()
     speech_queue.put(None)
+
+# Important: start the worker AFTER function defs
+threading.Thread(target=_speak_worker, daemon=True).start()
